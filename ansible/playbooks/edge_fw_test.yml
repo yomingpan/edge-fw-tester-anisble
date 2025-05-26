@@ -1,0 +1,47 @@
+
+---
+- name: Edge Firewall Connectivity Test
+  hosts: all
+  gather_facts: no
+  vars:
+    tester_dir: /tmp/edge_fw_tester
+  tasks:
+    - name: Ensure tester directory exists
+      file: path="{{ tester_dir }}" state=directory mode=0755
+
+    - name: Copy scripts and configs
+      copy:
+        src="{{ item }}"
+        dest="{{ tester_dir }}/{{ item | basename }}"
+        mode: 0755
+      loop:
+        - "{{ playbook_dir }}/../../scripts/run_tests.py"
+        - "{{ playbook_dir }}/../../config/targets.yaml"
+        - "{{ playbook_dir }}/../../src"
+
+    - name: Install dependencies (pip)
+      pip:
+        requirements: "{{ tester_dir }}/../../requirements.txt"
+        virtualenv: "{{ tester_dir }}/venv"
+      become: yes
+
+    - name: Run tests
+      command: "{{ tester_dir }}/venv/bin/python {{ tester_dir }}/run_tests.py --config {{ tester_dir }}/targets.yaml"
+      register: result
+      ignore_errors: yes
+
+    - name: Show raw result
+      debug:
+        var: result.stdout_lines
+
+    - name: Set fact for aggregation
+      set_fact:
+        edge_result: "{{ result.stdout }}"
+
+  # Aggregate results on control node
+- name: Aggregate edge results
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - debug:
+        msg: "Aggregation placeholder - parse hostvars for edge_result JSON to build summary."

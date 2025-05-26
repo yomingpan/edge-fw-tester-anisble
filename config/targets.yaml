@@ -1,0 +1,18 @@
+
+# Example target list
+- name: public-dns
+  host: 8.8.8.8
+  port: 53
+  proto: udp
+  payload: dns
+
+- name: ntp-google
+  host: time.google.com
+  port: 123
+  proto: udp
+  payload: ntp
+
+- name: example-web
+  host: example.com
+  port: 80
+  proto: tcp
