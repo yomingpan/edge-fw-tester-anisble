@@ -1,4 +1,3 @@
-
 ---
 - name: Edge Firewall Connectivity Test
   hosts: all
@@ -9,24 +8,31 @@
     - name: Ensure tester directory exists
       file: path="{{ tester_dir }}" state=directory mode=0755
 
+    - name: Copy edge_fw_tester package
+      copy:
+        src: "{{ playbook_dir }}/../../src/edge_fw_tester/"
+        dest: "{{ tester_dir }}/edge_fw_tester/"
+        mode: 0755
+
     - name: Copy scripts and configs
       copy:
-        src="{{ item }}"
-        dest="{{ tester_dir }}/{{ item | basename }}"
+        src: "{{ item.src }}"
+        dest: "{{ tester_dir }}/{{ item.dest }}"
         mode: 0755
       loop:
-        - "{{ playbook_dir }}/../../scripts/run_tests.py"
-        - "{{ playbook_dir }}/../../config/targets.yaml"
-        - "{{ playbook_dir }}/../../src"
+        - { src: "{{ playbook_dir }}/../../scripts/run_tests.py", dest: "run_tests.py" }
+        - { src: "{{ playbook_dir }}/../../config/targets.yaml", dest: "targets.yaml" }
+        - { src: "{{ playbook_dir }}/../../requirements.txt", dest: "requirements.txt" }
 
     - name: Install dependencies (pip)
       pip:
-        requirements: "{{ tester_dir }}/../../requirements.txt"
+        requirements: "{{ tester_dir }}/requirements.txt"
         virtualenv: "{{ tester_dir }}/venv"
-      become: yes
 
     - name: Run tests
       command: "{{ tester_dir }}/venv/bin/python {{ tester_dir }}/run_tests.py --config {{ tester_dir }}/targets.yaml"
+      environment:
+        PYTHONPATH: "{{ tester_dir }}"
       register: result
       ignore_errors: yes
 
@@ -48,6 +54,10 @@
   hosts: localhost
   gather_facts: no
   tasks:
+    - name: Ensure aggregated_results is defined
+      set_fact:
+        aggregated_results: []
+
     - name: Collect host results
       set_fact:
         aggregated_results: "{{ aggregated_results | default([]) + [ { 'host': item.key, 'results': item.value.edge_result_json } ] }}"
