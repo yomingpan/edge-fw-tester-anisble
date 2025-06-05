@@ -30,6 +30,11 @@
       register: result
       ignore_errors: yes
 
+    - name: Extract JSON result
+      set_fact:
+        edge_result_json: "{{ (result.stdout.split('--JSON-START--')[1].split('--JSON-END--')[0]).strip() | from_json }}"
+      when: "'--JSON-START--' in result.stdout"
+
     - name: Show raw result
       debug:
         var: result.stdout_lines
@@ -43,5 +48,18 @@
   hosts: localhost
   gather_facts: no
   tasks:
-    - debug:
-        msg: "Aggregation placeholder - parse hostvars for edge_result JSON to build summary."
+    - name: Collect host results
+      set_fact:
+        aggregated_results: "{{ aggregated_results | default([]) + [ { 'host': item.key, 'results': item.value.edge_result_json } ] }}"
+      loop: "{{ hostvars | dict2items }}"
+      when: item.value.edge_result_json is defined
+
+    - name: Display aggregated results
+      debug:
+        var: aggregated_results
+
+    - name: Publish aggregated results to AWX
+      set_stats:
+        data:
+          edge_test_results: "{{ aggregated_results }}"
+        aggregate: yes
