@@ -22,6 +22,7 @@
       loop:
         - { src: "{{ playbook_dir }}/../../scripts/run_tests.py", dest: "run_tests.py" }
         - { src: "{{ playbook_dir }}/../../config/targets.yaml", dest: "targets.yaml" }
+        - { src: "{{ playbook_dir }}/../../config/test.yaml", dest: "test.yaml" }
         - { src: "{{ playbook_dir }}/../../requirements.txt", dest: "requirements.txt" }
 
     - name: Install dependencies (pip)
@@ -30,7 +31,7 @@
         virtualenv: "{{ tester_dir }}/venv"
 
     - name: Run tests
-      command: "{{ tester_dir }}/venv/bin/python {{ tester_dir }}/run_tests.py --config {{ tester_dir }}/targets.yaml"
+      command: "{{ tester_dir }}/venv/bin/python {{ tester_dir }}/run_tests.py --config {{ tester_dir }}/test.yaml"
       environment:
         PYTHONPATH: "{{ tester_dir }}"
       register: result
@@ -73,3 +74,30 @@
         data:
           edge_test_results: "{{ aggregated_results }}"
         aggregate: yes
+
+    - name: Flatten all edge results
+      set_fact:
+        all_edge_results: >-
+          {{
+            aggregated_results | map(attribute='results') | sum(start=[]) | map('combine', {'edge': item.host}) | list
+          }}
+      loop: "{{ aggregated_results }}"
+      loop_control:
+        label: "{{ item.host }}"
+
+    - name: Group edge results by edge
+      set_fact:
+        edge_grouped_results: "{{ all_edge_results | groupby('edge') }}"
+
+    - name: Summarize edge results
+      vars:
+        success_status: ['OPEN', 'REACHABLE']
+      set_fact:
+        edge_summary: "{{ edge_summary | default([]) + [ { 'edge': item.0, 'total': item.1 | length, 'success': (item.1 | selectattr('status', 'in', success_status) | list | length), 'fail': (item.1 | rejectattr('status', 'in', success_status) | list | length) } ] }}"
+      loop: "{{ edge_grouped_results }}"
+
+    - name: Show edge summary
+      debug:
+        msg: >-
+          {{ item.edge }}: {{ item.success }}/{{ item.total }} success, success rate {{ (item.success / (item.total | float) * 100) | round(1) if item.total > 0 else 0 }}%
+      loop: "{{ edge_summary }}"
